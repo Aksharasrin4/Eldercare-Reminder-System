@@ -1,0 +1,93 @@
+version: "3.8"
+
+# ─────────────────────────────────────────────────────────────
+#  Dify Self-Hosted Docker Setup — Eldercare Reminder System
+#  Docs: https://docs.dify.ai/getting-started/install-self-hosted
+# ─────────────────────────────────────────────────────────────
+
+services:
+  # Dify API Server
+  api:
+    image: langgenius/dify-api:latest
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - MODE=api
+    volumes:
+      - dify_storage:/app/api/storage
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "5001:5001"
+
+  # Dify Web Frontend
+  web:
+    image: langgenius/dify-web:latest
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+
+  # Dify Worker (background task processor)
+  worker:
+    image: langgenius/dify-api:latest
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - MODE=worker
+    volumes:
+      - dify_storage:/app/api/storage
+    depends_on:
+      - db
+      - redis
+
+  # Nginx reverse proxy (serves everything on port 80)
+  nginx:
+    image: nginx:latest
+    restart: always
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+      - web
+
+  # PostgreSQL database
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: dify
+      POSTGRES_USER: dify
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-difypassword}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Redis cache
+  redis:
+    image: redis:7-alpine
+    restart: always
+    volumes:
+      - redis_data:/data
+
+  # Weaviate vector store
+  weaviate:
+    image: semitechnologies/weaviate:1.19.0
+    restart: always
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: /var/lib/weaviate
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+
+volumes:
+  dify_storage:
+  postgres_data:
+  redis_data:
+  weaviate_data:

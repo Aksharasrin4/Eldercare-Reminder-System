@@ -1,0 +1,104 @@
+name: Elderly Medication & Diet Reminder
+description: >
+  Automated reminder workflow for elderly individuals based on doctor and
+  nutritionist prescriptions. Reminders are delivered as Google Calendar events
+  using the Gemini API for message generation.
+version: 1.1
+
+# ─────────────────────────────────────────────
+# TECH STACK
+#   LLM        : Google Gemini (via Dify model provider)
+#   Platform   : Dify (self-hosted via Docker)
+#   Delivery   : Google Calendar API
+# ─────────────────────────────────────────────
+
+workflow:
+  inputs:
+    - id: user_info
+      name: Elderly Information
+      type: text
+      description: "Enter user's details such as name, age, and calendar email address."
+      example: "Name: Margaret, Age: 74, Calendar: margaret@gmail.com"
+
+    - id: prescriptions
+      name: Doctor Prescriptions
+      type: text
+      description: "List of medicines and timings prescribed by the doctor."
+      example: "8 AM - Vitamin D (1 tablet), 1 PM - Blood Pressure pill (Amlodipine 5mg), 9 PM - Calcium tablet"
+
+    - id: diet_plan
+      name: Nutrition Plan
+      type: text
+      description: "Meals or foods prescribed by a nutritionist and their recommended times."
+      example: "9 AM - Oatmeal with fruits, 1 PM - Light salad with protein, 3 PM - Green tea, 7 PM - Vegetable soup"
+
+    - id: reminder_date
+      name: Reminder Date
+      type: text
+      description: "The date for which to create calendar events (YYYY-MM-DD). Leave blank for today."
+      example: "2025-07-20"
+
+  nodes:
+    # ── Node 1: Generate the reminder message using Gemini ──────────────────
+    - id: llm_reminder
+      type: llm
+      name: Generate Reminder Message
+      model: gemini-pro          # Set your Gemini model in Dify's Model Provider settings
+      prompt: |
+        You are a kind, caring assistant helping elderly users remember their medications and meals.
+
+        Based on the following information:
+        - User Info: {{user_info}}
+        - Doctor Prescriptions: {{prescriptions}}
+        - Diet / Nutrition Plan: {{diet_plan}}
+
+        Do two things:
+        1. Write a warm, friendly daily reminder message using emojis and clear timing. Example format:
+           "🌞 Good morning, Margaret!
+            ⏰ 8:00 AM  - Take your Vitamin D with a glass of water 💊
+            🍎 9:00 AM  - Enjoy your oatmeal with fresh fruits 🥣
+            💊 1:00 PM  - Time for your Blood Pressure pill"
+
+        2. Return a JSON list called `events` where each entry is one reminder event:
+           [
+             { "time": "08:00", "title": "💊 Vitamin D", "description": "Take 1 Vitamin D tablet with a glass of water." },
+             { "time": "09:00", "title": "🍎 Breakfast", "description": "Enjoy your oatmeal with fresh fruits." }
+           ]
+
+        Return ONLY valid JSON in this format:
+        {
+          "message": "<full friendly reminder text>",
+          "events": [ ... ]
+        }
+
+    # ── Node 2: Daily schedule trigger ──────────────────────────────────────
+    - id: scheduler
+      type: trigger
+      name: Daily Reminder Trigger
+      trigger_type: time
+      schedule: "0 7 * * *"    # Runs every day at 7:00 AM (server time)
+      timezone: "Asia/Kolkata"  # Change to your local timezone
+
+    # ── Node 3: Create Google Calendar events ───────────────────────────────
+    - id: create_calendar_events
+      type: action
+      name: Add Reminders to Google Calendar
+      action_type: google_calendar
+      # Dify uses OAuth2 credentials configured in Settings → Integrations
+      operation: create_event
+      calendar_id: "{{user_info.calendar_email}}"   # patient's Google Calendar
+      events: "{{llm_reminder.output.events}}"
+      date: "{{reminder_date}}"
+      reminder_minutes_before: 10     # Pop-up alert 10 minutes early
+      send_notifications: true
+
+  outputs:
+    - id: final_message
+      name: Final Reminder Message
+      type: text
+      value: "{{llm_reminder.output.message}}"
+
+    - id: calendar_status
+      name: Calendar Events Created
+      type: text
+      value: "{{create_calendar_events.status}}"
