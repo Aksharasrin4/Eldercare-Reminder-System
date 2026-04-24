@@ -64,7 +64,7 @@ Patient receives alerts on phone/desktop 📱
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/eldercare-reminder-system.git
+git clone https://github.com/AksharaSrin4/Eldercare-Reminder-System.git
 cd eldercare-reminder-system
 ```
 
